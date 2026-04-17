@@ -1,0 +1,45 @@
+{
+  "name": "job-applier",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "login": "tsx src/cli/index.ts login",
+    "check": "tsx src/cli/index.ts check-session",
+    "clear": "tsx src/cli/index.ts clear-session",
+    "run": "tsx src/cli/index.ts run",
+    "run:dry": "tsx src/cli/index.ts run --dry-run",
+    "status": "tsx src/cli/index.ts status",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc && tsc-alias"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@clack/prompts": "^0.10.0",
+    "@lancedb/lancedb": "^0.27.2",
+    "@mozilla/readability": "^0.5.0",
+    "better-sqlite3": "^11.8.1",
+    "commander": "^13.1.0",
+    "croner": "^9.0.0",
+    "dotenv": "^16.4.7",
+    "jszip": "^3.10.1",
+    "linkedom": "^0.18.5",
+    "pdf-lib": "^1.17.1",
+    "playwright-core": "^1.51.0",
+    "sharp": "^0.33.5",
+    "sqlite-vec": "^0.1.9",
+    "tslog": "^4.9.3",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.13.10",
+    "tsc-alias": "^1.8.16",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}

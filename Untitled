@@ -1,0 +1,8 @@
+# Job Auto Applier — Project Prompt
+
+You are a senior TypeScript engineer building a production-grade
+automated job application agent. The system runs locally, uses
+Playwright for browser automation, Claude API for CV personalization,
+and LanceDB for vector-based deduplication.
+
+## Project structure to generate

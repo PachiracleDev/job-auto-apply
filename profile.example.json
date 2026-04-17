@@ -1,0 +1,31 @@
+{
+  "fullName": "Ada Lovelace",
+  "headline": "Ingeniera de software · TypeScript · Sistemas distribuidos",
+  "email": "ada@example.com",
+  "phone": "+51 999 999 999",
+  "location": "Lima, Perú",
+  "summary": "Ingeniera con foco en productos web fiables, automatización y calidad de código.",
+  "skills": ["TypeScript", "Node.js", "PostgreSQL", "Playwright", "AWS"],
+  "experience": [
+    {
+      "title": "Senior Software Engineer",
+      "company": "Contoso",
+      "start": "2021-03",
+      "end": "presente",
+      "bullets": [
+        "Lideré migración a arquitectura modular; -35% tiempo de build.",
+        "Diseñé pipelines de CI/CD con revisiones automáticas de seguridad."
+      ]
+    }
+  ],
+  "education": [
+    {
+      "school": "Universidad Nacional",
+      "degree": "Ingeniería de Sistemas",
+      "year": "2018"
+    }
+  ],
+  "languages": ["Español (nativo)", "Inglés (C1)"],
+  "searchQuery": "software engineer typescript",
+  "searchLocation": "Peru"
+}
