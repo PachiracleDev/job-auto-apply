@@ -11,7 +11,9 @@ import {
   sessionFileExists,
 } from "@/core/session/manager.js";
 import { validateLinkedInSession } from "@/core/session/validator.js";
+import { runEasyApplyCollectPipeline } from "@/core/collector/index.js";
 import { runApplicationPipeline } from "@/core/applicator/index.js";
+import { runApplyFromJsonPipeline } from "@/core/applicator/applyFromJson.js";
 import { listTrackedApplications } from "@/core/tracker/index.js";
 import { initDataLayer } from "@/data/db.js";
 import { logger } from "@/utils/logger.js";
@@ -20,7 +22,10 @@ async function cmdLogin(): Promise<void> {
   try {
     intro("Inicio de sesión LinkedIn");
     ensureSessionDir();
-    const { browser, context } = await launchBrowser({ headless: false });
+    const { browser, context } = await launchBrowser({
+      headless: false,
+      persistentProfile: true,
+    });
     const page = await context.newPage();
     await page.goto("https://www.linkedin.com/login", {
       waitUntil: "domcontentloaded",
@@ -31,7 +36,7 @@ async function cmdLogin(): Promise<void> {
     await page.waitForURL(/linkedin\.com\/feed/, { timeout: 600_000 });
     await saveSession(context);
     await context.close();
-    await browser.close();
+    await browser?.close().catch(() => undefined);
     outro("Sesión guardada correctamente.");
   } catch (e) {
     const err = e instanceof Error ? e : new Error(String(e));
@@ -43,7 +48,7 @@ async function cmdLogin(): Promise<void> {
 async function cmdCheckSession(): Promise<void> {
   try {
     if (!sessionFileExists()) {
-      logger.warn("No hay archivo de sesión. Ejecuta `pnpm login`.");
+      logger.warn("No hay archivo de sesión. Ejecuta `pnpm cli -- login`.");
       process.exitCode = 1;
       return;
     }
@@ -53,7 +58,7 @@ async function cmdCheckSession(): Promise<void> {
     });
     const ok = await validateLinkedInSession(context);
     await context.close();
-    await browser.close();
+    await browser?.close().catch(() => undefined);
     if (ok) {
       logger.info("Sesión válida.");
     } else {
@@ -85,6 +90,39 @@ async function cmdRun(dryRun: boolean, maxJobs: number): Promise<void> {
   } catch (e) {
     const err = e instanceof Error ? e : new Error(String(e));
     logger.error("run: " + err.message);
+    process.exitCode = 1;
+  }
+}
+
+async function cmdCollect(maxJobs: number, outPath?: string): Promise<void> {
+  try {
+    await runEasyApplyCollectPipeline({ maxJobs, outPath });
+    logger.info("Recolección finalizada.");
+  } catch (e) {
+    const err = e instanceof Error ? e : new Error(String(e));
+    logger.error("collect: " + err.message);
+    process.exitCode = 1;
+  }
+}
+
+async function cmdApplyFromJson(
+  fromPath: string,
+  maxJobs: number,
+  dryRun: boolean,
+  cvPath?: string,
+): Promise<void> {
+  try {
+    const effectiveDry = dryRun || env.DRY_RUN;
+    await runApplyFromJsonPipeline({
+      jsonPath: fromPath,
+      maxJobs,
+      dryRun: effectiveDry,
+      cvPdfPath: cvPath,
+    });
+    logger.info("Aplicación desde JSON finalizada.");
+  } catch (e) {
+    const err = e instanceof Error ? e : new Error(String(e));
+    logger.error("apply: " + err.message);
     process.exitCode = 1;
   }
 }
@@ -140,6 +178,63 @@ program
   .action(async () => {
     await cmdClearSession();
   });
+
+program
+  .command("collect")
+  .description(
+    "Solo ofertas Easy Apply: recolecta datos y las guarda en JSON (no postula)",
+  )
+  .option("--max-jobs <n>", "Máximo de ofertas a guardar", "30")
+  .option("--out <path>", "Ruta del JSON (por defecto: output/easy-apply-<fecha>.json)")
+  .action(async (opts: { maxJobs?: string; out?: string }) => {
+    const maxJobs = Number.parseInt(String(opts.maxJobs ?? "30"), 10);
+    if (Number.isNaN(maxJobs) || maxJobs < 1) {
+      logger.error("--max-jobs debe ser un entero >= 1");
+      process.exitCode = 1;
+      return;
+    }
+    await cmdCollect(maxJobs, opts.out);
+  });
+
+program
+  .command("apply")
+  .description(
+    "Fase 2: abre applyUrl del JSON de collect, rellena el modal (IA + heurísticas) y adjunta el CV",
+  )
+  .requiredOption("--from <path>", "JSON generado por collect (ej. output/easy-apply-....json)")
+  .option("--max-jobs <n>", "Máximo de ofertas a procesar", "10")
+  .option("--dry-run", "No enviar formularios; solo flujo simulado", false)
+  .option(
+    "--cv <path>",
+    "PDF del CV (por defecto DEFAULT_CV_PDF, ej. ./cv/CV - ES.pdf)",
+  )
+  .action(
+    async (opts: {
+      from?: string;
+      maxJobs?: string;
+      dryRun?: boolean;
+      cv?: string;
+    }) => {
+      const fromPath = String(opts.from ?? "").trim();
+      if (!fromPath) {
+        logger.error("--from es obligatorio");
+        process.exitCode = 1;
+        return;
+      }
+      const maxJobs = Number.parseInt(String(opts.maxJobs ?? "10"), 10);
+      if (Number.isNaN(maxJobs) || maxJobs < 1) {
+        logger.error("--max-jobs debe ser un entero >= 1");
+        process.exitCode = 1;
+        return;
+      }
+      await cmdApplyFromJson(
+        fromPath,
+        maxJobs,
+        Boolean(opts.dryRun),
+        opts.cv?.trim() || undefined,
+      );
+    },
+  );
 
 program
   .command("run")

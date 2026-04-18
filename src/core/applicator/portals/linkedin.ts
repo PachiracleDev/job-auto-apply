@@ -1,6 +1,8 @@
+import { existsSync } from "node:fs";
 import type { Locator, Page } from "playwright-core";
 import type { JobPost } from "@/types/index.js";
 import type { UserProfile } from "@/config/profile.js";
+import { env } from "@/config/env.js";
 import {
   DISMISS,
   EASY_APPLY_ENTRY,
@@ -10,12 +12,25 @@ import {
   REVIEW,
   SUBMIT,
 } from "@/config/linkedinEasyApply.js";
+import {
+  applyModalFieldAnswers,
+  collectModalFieldSpecs,
+} from "@/core/applicator/linkedinModalFields.js";
+import { fetchEasyApplyFieldAnswersWithOpenAi } from "@/core/applicator/openaiEasyApplyFill.js";
 import { humanDelay, randomDelay } from "@/utils/delay.js";
 import { logger } from "@/utils/logger.js";
 
 export interface ApplyLinkedInOptions {
   dryRun: boolean;
   profile: UserProfile;
+  /**
+   * URL directa al flujo Easy Apply (/jobs/view/.../apply). Si se define, no se hace clic en el botón de la ficha.
+   */
+  applyUrl?: string;
+  /** Ruta absoluta o relativa al cwd del PDF a adjuntar (por defecto DEFAULT_CV_PDF). */
+  cvPdfPath?: string;
+  /** false fuerza solo heurísticas. Por defecto sigue env (IA si hay OPENAI_API_KEY). */
+  useOpenAiForm?: boolean;
 }
 
 const MAX_STEPS = 40;
@@ -97,17 +112,42 @@ async function fillTextAreas(modal: Locator, profile: UserProfile): Promise<void
     if (!(await ta.isEditable())) continue;
     const hint = `${(await ta.getAttribute("placeholder")) ?? ""} ${(await ta.getAttribute("aria-label")) ?? ""} ${(await ta.getAttribute("name")) ?? ""}`.toLowerCase();
     const current = (await ta.inputValue().catch(() => "")).trim();
-    if (current.length > 20) continue;
+    // Solo rellenar si el campo está prácticamente vacío (la IA ya lo pudo rellenar antes)
+    if (current.length > 30) continue;
 
-    if (hint.includes("cover") || hint.includes("carta") || hint.includes("mensaje")) {
+    if (hint.includes("cover") || hint.includes("carta") || hint.includes("presentaci") || hint.includes("mensaje")) {
       await ta.fill(
-        `Estimado equipo de contratación,\n\nMe interesa esta posición y creo que encajo con el rol descrito.\n\nSaludos,\n${profile.fullName}`,
+        `Estimado equipo de contratación,\n\nMe interesa esta posición y creo que encajo bien con el perfil buscado.\n\nSaludos,\n${profile.fullName}`,
       );
     } else {
       await ta.fill(profile.summary.slice(0, 2000));
     }
     await humanDelay();
   }
+}
+
+function isApplicantFullNameField(label: string): boolean {
+  if (
+    label.includes("company") ||
+    label.includes("empresa") ||
+    label.includes("employer") ||
+    label.includes("school") ||
+    label.includes("universidad")
+  ) {
+    return false;
+  }
+  if (
+    label.includes("job title") ||
+    label.includes("título del puesto") ||
+    label.includes("titulo del puesto") ||
+    label.includes("nombre del puesto")
+  ) {
+    return false;
+  }
+  if (label.includes("full name") || label.includes("nombre completo")) return true;
+  if (label.includes("your name") || label.includes("tu nombre")) return true;
+  if (label.includes("nombre") && !label.includes("proyecto")) return true;
+  return false;
 }
 
 async function fillTextInputs(modal: Locator, profile: UserProfile): Promise<void> {
@@ -120,21 +160,26 @@ async function fillTextInputs(modal: Locator, profile: UserProfile): Promise<voi
     if (!(await input.isEditable())) continue;
     const label = `${(await input.getAttribute("aria-label")) ?? ""} ${(await input.getAttribute("placeholder")) ?? ""} ${(await input.getAttribute("name")) ?? ""}`.toLowerCase();
     const val = (await input.inputValue().catch(() => "")).trim();
-    if (val.length > 0) continue;
 
-    if (
-      label.includes("email") ||
-      label.includes("correo") ||
-      label.includes("e-mail")
-    ) {
-      await input.fill(profile.email);
-    } else if (
+    const isEmail =
+      label.includes("email") || label.includes("correo") || label.includes("e-mail");
+    const isPhone =
       label.includes("phone") ||
       label.includes("tel") ||
       label.includes("móvil") ||
-      label.includes("mobile")
-    ) {
+      label.includes("mobile") ||
+      label.includes("celular");
+    const isFullName = isApplicantFullNameField(label);
+    /** Nombre, email y teléfono siempre del perfil (pisan lo que haya escrito la IA). */
+    const forceFromProfile = isEmail || isPhone || isFullName;
+    if (val.length > 0 && !forceFromProfile) continue;
+
+    if (isEmail) {
+      await input.fill(profile.email);
+    } else if (isPhone) {
       await input.fill(profile.phone);
+    } else if (isFullName) {
+      await input.fill(profile.fullName);
     } else if (
       label.includes("city") ||
       label.includes("ciudad") ||
@@ -158,6 +203,8 @@ async function fillNativeSelects(modal: Locator): Promise<void> {
     const sel = selects.nth(i);
     const opts = await sel.locator("option").count();
     if (opts <= 1) continue;
+    const current = (await sel.inputValue().catch(() => "")).trim();
+    if (current !== "") continue;
     try {
       await sel.selectOption({ index: 1 });
     } catch {
@@ -167,7 +214,31 @@ async function fillNativeSelects(modal: Locator): Promise<void> {
   }
 }
 
-async function fillRadioGroups(modal: Locator): Promise<void> {
+/** Palabras clave relacionadas con modalidad de trabajo. */
+const MODALITY_HINTS = [
+  "modali", "remote", "remoto", "hybrid", "híbrido", "presenci",
+  "work type", "tipo de trabajo", "trabajo desde", "work location",
+];
+
+const MODALITY_NORMALIZERS: Record<string, string[]> = {
+  remote:   ["remote", "remoto", "100% remoto", "desde casa", "work from home", "fully remote"],
+  hybrid:   ["hybrid", "híbrido", "hibrido", "mixto"],
+  on_site:  ["on-site", "on site", "presencial", "in-office", "in office", "en oficina"],
+};
+
+function buildModalityKeywords(preferred: string[]): string[] {
+  const kws: string[] = [];
+  for (const pref of preferred) {
+    const key = pref.toLowerCase().replace(/-/g, "_");
+    kws.push(...(MODALITY_NORMALIZERS[key] ?? [pref.toLowerCase()]));
+  }
+  return kws;
+}
+
+async function fillRadioGroups(modal: Locator, profile: UserProfile): Promise<void> {
+  const preferredModality = profile.jobPreferences?.modality ?? [];
+  const modalityKws = buildModalityKeywords(preferredModality);
+
   const groups = modal.locator(
     'fieldset:has(input[type="radio"]), [role="radiogroup"]',
   );
@@ -176,10 +247,46 @@ async function fillRadioGroups(modal: Locator): Promise<void> {
     const g = groups.nth(i);
     const picked = g.locator('input[type="radio"]:checked');
     if ((await picked.count()) > 0) continue;
-    const first = g.locator('input[type="radio"]:visible').first();
-    if ((await first.count()) === 0) continue;
-    await first.scrollIntoViewIfNeeded();
-    await first.click({ timeout: CLICK_TIMEOUT_MS }).catch(() => undefined);
+
+    const radios = g.locator('input[type="radio"]:visible');
+    if ((await radios.count()) === 0) continue;
+
+    // Detecta si el grupo es sobre modalidad/tipo de trabajo
+    const groupText = (await g.innerText().catch(() => "")).toLowerCase();
+    const isModalityGroup = MODALITY_HINTS.some((h) => groupText.includes(h));
+
+    if (isModalityGroup && modalityKws.length > 0) {
+      // Intenta clicar el radio cuya etiqueta coincide con la preferencia
+      let clicked = false;
+      const n = await radios.count();
+      for (let k = 0; k < n && !clicked; k++) {
+        const rb = radios.nth(k);
+        const id = await rb.getAttribute("id");
+        let lbl = "";
+        if (id) {
+          lbl = await g
+            .locator(`label[for="${id.replace(/"/g, '\\"')}"]`)
+            .innerText()
+            .catch(() => "");
+        }
+        if (!lbl) lbl = (await rb.getAttribute("aria-label")) ?? (await rb.getAttribute("value")) ?? "";
+        const lblLow = lbl.trim().toLowerCase();
+        if (modalityKws.some((kw) => lblLow.includes(kw))) {
+          await rb.scrollIntoViewIfNeeded();
+          await rb.click({ timeout: CLICK_TIMEOUT_MS }).catch(() => undefined);
+          clicked = true;
+        }
+      }
+      if (!clicked) {
+        const first = radios.first();
+        await first.scrollIntoViewIfNeeded();
+        await first.click({ timeout: CLICK_TIMEOUT_MS }).catch(() => undefined);
+      }
+    } else {
+      const first = radios.first();
+      await first.scrollIntoViewIfNeeded();
+      await first.click({ timeout: CLICK_TIMEOUT_MS }).catch(() => undefined);
+    }
     await humanDelay();
   }
 }
@@ -217,8 +324,70 @@ async function fillVisibleFields(
   await fillTextAreas(modal, profile);
   await fillTextInputs(modal, profile);
   await fillNativeSelects(modal);
-  await fillRadioGroups(modal);
+  await fillRadioGroups(modal, profile);
   await checkRequiredCheckboxes(modal);
+}
+
+async function uploadResumePdf(
+  modal: Locator,
+  page: Page,
+  cvPath: string,
+): Promise<void> {
+  if (!existsSync(cvPath)) {
+    logger.warn(`CV no encontrado en ${cvPath}; se omite la subida.`);
+    return;
+  }
+  const fileInput = modal.locator('input[type="file"]');
+  if ((await fileInput.count()) === 0) return;
+  try {
+    await fileInput.first().setInputFiles(cvPath);
+    await humanDelay();
+    await waitForLoadingGone(page, 15_000);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    logger.warn(`No se pudo adjuntar el CV: ${msg}`);
+  }
+}
+
+async function fillModalStep(
+  modal: Locator,
+  page: Page,
+  job: JobPost,
+  profile: UserProfile,
+  applyOptions: ApplyLinkedInOptions,
+): Promise<void> {
+  const cvPath = applyOptions.cvPdfPath ?? env.defaultCvPdfAbs;
+  await uploadResumePdf(modal, page, cvPath);
+
+  const useAi =
+    (applyOptions.useOpenAiForm ?? env.applyUseOpenAiForm) &&
+    env.OPENAI_API_KEY.length > 0;
+
+  if (useAi) {
+    try {
+      const specs = await collectModalFieldSpecs(modal);
+      if (specs.length > 0) {
+        const { answers } = await fetchEasyApplyFieldAnswersWithOpenAi({
+          apiKey: env.OPENAI_API_KEY,
+          model: env.APPLY_OPENAI_MODEL,
+          profile,
+          cvNote: `Archivo PDF del CV: ${cvPath}. Contenido alineado con el perfil JSON.`,
+          job: {
+            title: job.title,
+            company: job.company,
+            description: job.description,
+          },
+          fields: specs,
+        });
+        await applyModalFieldAnswers(modal, specs, answers);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      logger.warn(`Easy Apply (IA): ${msg}`);
+    }
+  }
+
+  await fillVisibleFields(modal, profile);
 }
 
 export async function applyLinkedInEasyApply(
@@ -227,29 +396,38 @@ export async function applyLinkedInEasyApply(
   options: ApplyLinkedInOptions,
 ): Promise<void> {
   try {
-    await page.goto(job.url, { waitUntil: "domcontentloaded" });
+    const directApply = Boolean(options.applyUrl?.trim());
+    const startUrl = directApply ? options.applyUrl!.trim() : job.url;
+
+    await page.goto(startUrl, { waitUntil: "domcontentloaded" });
     await randomDelay();
 
-    const entry = page.locator(EASY_APPLY_ENTRY).first();
-    await entry
-      .waitFor({ state: "visible", timeout: 45_000 })
-      .catch(() => undefined);
+    if (!directApply) {
+      const entry = page.locator(EASY_APPLY_ENTRY).first();
+      await entry
+        .waitFor({ state: "visible", timeout: 45_000 })
+        .catch(() => undefined);
 
-    if ((await entry.count()) === 0 || !(await entry.isVisible().catch(() => false))) {
-      logger.info("Easy Apply no disponible para " + job.url);
-      return;
+      if ((await entry.count()) === 0 || !(await entry.isVisible().catch(() => false))) {
+        logger.info("Easy Apply no disponible para " + job.url);
+        return;
+      }
     }
 
     if (options.dryRun) {
       logger.warn(
-        `[dry-run] Se habría abierto Easy Apply para: ${job.title} @ ${job.company}`,
+        `[dry-run] Se habría abierto Easy Apply para: ${job.title} @ ${job.company}` +
+          (directApply ? ` (${startUrl})` : ""),
       );
       return;
     }
 
-    await entry.scrollIntoViewIfNeeded();
-    await entry.click({ timeout: CLICK_TIMEOUT_MS });
-    await humanDelay();
+    if (!directApply) {
+      const entry = page.locator(EASY_APPLY_ENTRY).first();
+      await entry.scrollIntoViewIfNeeded();
+      await entry.click({ timeout: CLICK_TIMEOUT_MS });
+      await humanDelay();
+    }
 
     let modal: Locator;
     try {
@@ -272,7 +450,7 @@ export async function applyLinkedInEasyApply(
         break;
       }
 
-      await fillVisibleFields(modal, options.profile);
+      await fillModalStep(modal, page, job, options.profile, options);
       await waitForLoadingGone(page, 12_000);
 
       const action = await clickStepButton(modal);

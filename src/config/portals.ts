@@ -1,7 +1,8 @@
 import type { Portal } from "@/types/index.js";
 
 const linkedinSelectors = {
-  jobCard: ".jobs-search-results__list-item, .scaffold-layout__list-item",
+  jobCard:
+    ".jobs-search-results__list-item, .scaffold-layout__list-item, li[data-occludable-job-id], div.job-card-container, li.jobs-search-results__list-item",
   jobTitleLink: "a.job-card-list__title-link, a.job-card-container__link",
   companyName: ".job-card-container__primary-description, .artdeco-entity-lockup__subtitle",
   jobLocation: ".job-card-container__metadata-item",
@@ -17,7 +18,7 @@ const linkedinSelectors = {
 export const linkedinPortal: Portal = {
   name: "linkedin",
   baseUrl: "https://www.linkedin.com",
-  searchUrl: (query: string, location: string) => {
+  searchUrl: (query: string, location: string, options?: { easyApplyOnly?: boolean }) => {
     const params = new URLSearchParams({
       keywords: query,
       location: location,
@@ -25,6 +26,9 @@ export const linkedinPortal: Portal = {
       position: "1",
       pageNum: "0",
     });
+    if (options?.easyApplyOnly) {
+      params.set("f_AL", "true");
+    }
     return `https://www.linkedin.com/jobs/search/?${params.toString()}`;
   },
   selectors: linkedinSelectors as unknown as Record<string, string>,

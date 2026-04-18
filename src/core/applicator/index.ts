@@ -1,4 +1,3 @@
-import type { Browser } from "playwright-core";
 import { env } from "@/config/env.js";
 import { loadProfile } from "@/config/profile.js";
 import { initDataLayer } from "@/data/db.js";
@@ -26,7 +25,11 @@ import {
   generateCoverLetter,
   generateTailoredCvMarkdown,
 } from "@/core/cv/generator.js";
-import { bundleCvArtifacts, renderCvPdf } from "@/core/cv/renderer.js";
+import {
+  bundleCvArtifacts,
+  copyDefaultCvPdfToOutput,
+  renderCvPdf,
+} from "@/core/cv/renderer.js";
 import type { CVData, JobPost } from "@/types/index.js";
 import { humanDelay, longDelay } from "@/utils/delay.js";
 import { logger } from "@/utils/logger.js";
@@ -44,20 +47,15 @@ function attachVector(post: JobPost): JobPost {
 export async function runApplicationPipeline(
   options: RunPipelineOptions,
 ): Promise<void> {
-  let browser: Browser | undefined;
+  let browser: Awaited<ReturnType<typeof launchBrowser>>["browser"] | undefined;
   let context: Awaited<ReturnType<typeof launchBrowser>>["context"] | undefined;
   try {
-    if (!env.ANTHROPIC_API_KEY) {
-      throw new Error(
-        "ANTHROPIC_API_KEY es obligatoria en .env para generar CV y ejecutar el pipeline.",
-      );
-    }
     await initDataLayer();
     const profile = loadProfile();
 
     if (!sessionFileExists()) {
       throw new Error(
-        "No hay sesión de LinkedIn. Ejecuta `pnpm login` antes de `pnpm run`.",
+        "No hay sesión de LinkedIn. Ejecuta `pnpm cli -- login` antes de `pnpm cli -- run`.",
       );
     }
 
@@ -71,7 +69,7 @@ export async function runApplicationPipeline(
     const ok = await validateLinkedInSession(context);
     if (!ok) {
       throw new Error(
-        "La sesión de LinkedIn no es válida. Vuelve a ejecutar `pnpm login`.",
+        "La sesión de LinkedIn no es válida. Vuelve a ejecutar `pnpm cli -- login`.",
       );
     }
 
@@ -83,6 +81,7 @@ export async function runApplicationPipeline(
     });
 
     for (const raw of rawJobs) {
+      console.log(raw);
       const job = attachVector(raw);
       let appId: string | undefined;
       try {
@@ -100,8 +99,14 @@ export async function runApplicationPipeline(
           status: "pending",
         });
 
-        const cvMd = await generateTailoredCvMarkdown(profile, job);
-        const cover = await generateCoverLetter(profile, job);
+        const cvMd = env.CV_TAILOR_WITH_AI
+          ? await generateTailoredCvMarkdown(profile, job)
+          : `CV base (sin personalización con IA)\n\nOrigen: ${env.DEFAULT_CV_PDF}\n\nEl PDF adjunto es una copia del archivo predeterminado.`;
+
+        const cover = env.COVER_LETTER_WITH_AI
+          ? await generateCoverLetter(profile, job)
+          : `Estimado equipo de contratación,\n\nMe interesa esta posición y creo que encajo con el rol descrito.\n\nSaludos,\n${profile.fullName}`;
+
         const cvData: CVData = {
           jobPostId: job.id,
           content: cvMd,
@@ -110,7 +115,9 @@ export async function runApplicationPipeline(
         saveCvRecord(cvData);
 
         const baseName = `cv-${job.id}`;
-        const pdfPath = await renderCvPdf(cvData, baseName);
+        const pdfPath = env.CV_TAILOR_WITH_AI
+          ? await renderCvPdf(cvData, baseName)
+          : await copyDefaultCvPdfToOutput(baseName);
         cvData.pdfPath = pdfPath;
 
         await bundleCvArtifacts({
@@ -157,8 +164,6 @@ export async function runApplicationPipeline(
     if (context) {
       await context.close().catch(() => undefined);
     }
-    if (browser) {
-      await browser.close().catch(() => undefined);
-    }
+    await browser?.close().catch(() => undefined);
   }
 }

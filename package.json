@@ -5,17 +5,17 @@
   "type": "module",
   "packageManager": "pnpm@9.15.4",
   "engines": {
-    "node": ">=20"
+    "node": ">=20",
+    "bun": ">=1.0"
   },
   "scripts": {
-    "login": "tsx src/cli/index.ts login",
-    "check": "tsx src/cli/index.ts check-session",
-    "clear": "tsx src/cli/index.ts clear-session",
-    "run": "tsx src/cli/index.ts run",
-    "run:dry": "tsx src/cli/index.ts run --dry-run",
-    "status": "tsx src/cli/index.ts status",
-    "typecheck": "tsc --noEmit",
-    "build": "tsc && tsc-alias"
+    "cli": "tsx src/cli/index.ts",
+    "typecheck": "tsc --noEmit && pnpm --filter job-applier-worker exec tsc --noEmit",
+    "build": "tsc && tsc-alias",
+    "worker": "bun server/src/index.ts",
+    "worker:dev": "bun --watch server/src/index.ts",
+    "worker:db:generate": "pnpm --filter job-applier-worker exec drizzle-kit generate",
+    "worker:db:migrate": "pnpm --filter job-applier-worker exec drizzle-kit migrate"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
@@ -28,6 +28,7 @@
     "dotenv": "^16.4.7",
     "jszip": "^3.10.1",
     "linkedom": "^0.18.5",
+    "openai": "^4.77.0",
     "pdf-lib": "^1.17.1",
     "playwright-core": "^1.51.0",
     "sharp": "^0.33.5",

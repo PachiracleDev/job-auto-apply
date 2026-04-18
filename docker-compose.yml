@@ -1,0 +1,23 @@
+# Servidor de navegadores Playwright (headless) expuesto por WebSocket.
+# Protocolo nativo de Playwright (mejor que CDP solo): varios clientes pueden conectar
+# al mismo proceso; escala horizontal = más réplicas / más puertos.
+#
+# Uso:
+#   docker compose up playwright-browser
+# En .env (raíz del repo):
+#   PLAYWRIGHT_WS_ENDPOINT=ws://127.0.0.1:9222/
+#
+# La versión de `playwright@…` debe coincidir (major.minor) con `playwright-core` en pnpm-lock.yaml.
+services:
+  playwright-browser:
+    image: mcr.microsoft.com/playwright:v1.59.1-noble
+    ports:
+      - "9222:9222"
+    init: true
+    shm_size: 2gb
+    working_dir: /home/pwuser
+    user: pwuser
+    command:
+      - /bin/sh
+      - -c
+      - npx -y playwright@1.59.1 run-server --port 9222 --host 0.0.0.0

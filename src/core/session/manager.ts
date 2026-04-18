@@ -34,7 +34,7 @@ export function loadStorageState(): { cookies: unknown[]; origins?: unknown[] } 
   try {
     const path = getLinkedInSessionPath();
     if (!existsSync(path)) {
-      throw new Error("No hay sesión guardada. Ejecuta `pnpm login` primero.");
+      throw new Error("No hay sesión guardada. Ejecuta `pnpm cli -- login` primero.");
     }
     const raw = readFileSync(path, "utf-8");
     const parsed: unknown = JSON.parse(raw);

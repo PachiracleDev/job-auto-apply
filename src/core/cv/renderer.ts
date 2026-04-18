@@ -1,4 +1,10 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import JSZip from "jszip";
@@ -39,6 +45,25 @@ function wrapText(text: string): string[] {
     out.push(...wrapLine(trimmed));
   }
   return out;
+}
+
+/** Copia el PDF base (DEFAULT_CV_PDF) a output con el nombre del trabajo. */
+export async function copyDefaultCvPdfToOutput(baseName: string): Promise<string> {
+  try {
+    mkdirSync(env.outputDirAbs, { recursive: true });
+    const pdfPath = join(env.outputDirAbs, `${baseName}.pdf`);
+    if (!existsSync(env.defaultCvPdfAbs)) {
+      throw new Error(
+        `No se encuentra el CV predeterminado: ${env.defaultCvPdfAbs}`,
+      );
+    }
+    copyFileSync(env.defaultCvPdfAbs, pdfPath);
+    return pdfPath;
+  } catch (e) {
+    const err = e instanceof Error ? e : new Error(String(e));
+    logger.error("copyDefaultCvPdfToOutput: " + err.message);
+    throw err;
+  }
 }
 
 export async function renderCvPdf(cv: CVData, baseName: string): Promise<string> {

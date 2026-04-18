@@ -3,6 +3,15 @@
  * LinkedIn cambia el DOM con frecuencia: mantener listas amplias y fallbacks.
  */
 
+/** Timeout de `waitFor` en tarjeta superior (título/empresa) tras hidratar. */
+export const LINKEDIN_JOB_DETAIL_WAIT_MS = 8000;
+
+/** Tras el shell, React suele rellenar título/descripción unos cientos de ms después. */
+export const LINKEDIN_JOB_HYDRATE_WAIT_MS = 14_000;
+
+/** Timeout de `goto` a la ficha de un empleo (evita colgarse minutos si la red va mal). */
+export const LINKEDIN_JOB_PAGE_GOTO_MS = 45_000;
+
 export const EASY_APPLY_MODAL = [
   ".jobs-easy-apply-modal",
   "[data-test-modal-container]",
