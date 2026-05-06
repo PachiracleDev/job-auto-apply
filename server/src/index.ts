@@ -1,4 +1,5 @@
 import "./env.js";
+import { env } from "../../src/config/env.js";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { apiKeyAuth } from "./middleware/apiKey.js";
@@ -6,6 +7,16 @@ import { healthRoutes } from "./routes/health.js";
 import { userDataRoutes } from "./routes/userData.js";
 import { providerRoutes } from "./routes/providers.js";
 import { jobsRoutes } from "./routes/jobs.js";
+
+console.log(
+  `[worker] PLAYWRIGHT_WS_ENDPOINT (process.env)=${JSON.stringify(process.env["PLAYWRIGHT_WS_ENDPOINT"] ?? null)}`,
+);
+console.log(
+  `[worker] PLAYWRIGHT_PDF_WS_ENDPOINT (process.env)=${JSON.stringify(process.env["PLAYWRIGHT_PDF_WS_ENDPOINT"] ?? null)}`,
+);
+console.log(
+  `[worker] Playwright WS efectivo (launchBrowser)=${JSON.stringify(env.PLAYWRIGHT_WS_ENDPOINT ?? null)}`,
+);
 
 const app = new Hono();
 

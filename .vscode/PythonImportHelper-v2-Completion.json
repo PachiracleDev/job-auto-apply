@@ -1,0 +1,73 @@
+[
+    {
+        "label": "annotations",
+        "importPath": "__future__",
+        "description": "__future__",
+        "isExtraImport": true,
+        "detail": "__future__",
+        "documentation": {}
+    },
+    {
+        "label": "random",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "random",
+        "description": "random",
+        "detail": "random",
+        "documentation": {}
+    },
+    {
+        "label": "sys",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "sys",
+        "description": "sys",
+        "detail": "sys",
+        "documentation": {}
+    },
+    {
+        "label": "time",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "time",
+        "description": "time",
+        "detail": "time",
+        "documentation": {}
+    },
+    {
+        "label": "main",
+        "kind": 2,
+        "importPath": "anti_afk_mouse",
+        "description": "anti_afk_mouse",
+        "peekOfCode": "def main() -> None:\n    w, h = pyautogui.size()\n    print(f\"Pantalla: {w}x{h}. Intervalo: {INTERVAL_SEC}s. Ctrl+C para salir.\")\n    try:\n        while True:\n            x = random.randint(MARGIN, max(MARGIN, w - MARGIN - 1))\n            y = random.randint(MARGIN, max(MARGIN, h - MARGIN - 1))\n            pyautogui.moveTo(x, y, duration=0.15)\n            time.sleep(INTERVAL_SEC)\n    except KeyboardInterrupt:",
+        "detail": "anti_afk_mouse",
+        "documentation": {}
+    },
+    {
+        "label": "pyautogui.FAILSAFE",
+        "kind": 5,
+        "importPath": "anti_afk_mouse",
+        "description": "anti_afk_mouse",
+        "peekOfCode": "pyautogui.FAILSAFE = False\nINTERVAL_SEC = 3\n# Margen en píxeles respecto a los bordes para no clics accidentales en barras del sistema\nMARGIN = 20\ndef main() -> None:\n    w, h = pyautogui.size()\n    print(f\"Pantalla: {w}x{h}. Intervalo: {INTERVAL_SEC}s. Ctrl+C para salir.\")\n    try:\n        while True:\n            x = random.randint(MARGIN, max(MARGIN, w - MARGIN - 1))",
+        "detail": "anti_afk_mouse",
+        "documentation": {}
+    },
+    {
+        "label": "INTERVAL_SEC",
+        "kind": 5,
+        "importPath": "anti_afk_mouse",
+        "description": "anti_afk_mouse",
+        "peekOfCode": "INTERVAL_SEC = 3\n# Margen en píxeles respecto a los bordes para no clics accidentales en barras del sistema\nMARGIN = 20\ndef main() -> None:\n    w, h = pyautogui.size()\n    print(f\"Pantalla: {w}x{h}. Intervalo: {INTERVAL_SEC}s. Ctrl+C para salir.\")\n    try:\n        while True:\n            x = random.randint(MARGIN, max(MARGIN, w - MARGIN - 1))\n            y = random.randint(MARGIN, max(MARGIN, h - MARGIN - 1))",
+        "detail": "anti_afk_mouse",
+        "documentation": {}
+    },
+    {
+        "label": "MARGIN",
+        "kind": 5,
+        "importPath": "anti_afk_mouse",
+        "description": "anti_afk_mouse",
+        "peekOfCode": "MARGIN = 20\ndef main() -> None:\n    w, h = pyautogui.size()\n    print(f\"Pantalla: {w}x{h}. Intervalo: {INTERVAL_SEC}s. Ctrl+C para salir.\")\n    try:\n        while True:\n            x = random.randint(MARGIN, max(MARGIN, w - MARGIN - 1))\n            y = random.randint(MARGIN, max(MARGIN, h - MARGIN - 1))\n            pyautogui.moveTo(x, y, duration=0.15)\n            time.sleep(INTERVAL_SEC)",
+        "detail": "anti_afk_mouse",
+        "documentation": {}
+    }
+]

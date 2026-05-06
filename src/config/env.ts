@@ -26,6 +26,11 @@ const envSchema = z.object({
    * Si está definido, no se lanza Chrome local: se usa `chromium.connect`.
    */
   PLAYWRIGHT_WS_ENDPOINT: z.string().optional(),
+  /**
+   * Alias legacy para compatibilidad con despliegues existentes.
+   * Si viene definido y PLAYWRIGHT_WS_ENDPOINT no, se reutiliza.
+   */
+  PLAYWRIGHT_PDF_WS_ENDPOINT: z.string().optional(),
   LOG_LEVEL: z
     .enum(["trace", "debug", "info", "warn", "error", "fatal"])
     .default("info"),
@@ -78,6 +83,7 @@ function parseEnv(): Env {
     OUTPUT_DIR: process.env["OUTPUT_DIR"],
     BROWSER_PATH: process.env["BROWSER_PATH"],
     PLAYWRIGHT_WS_ENDPOINT: process.env["PLAYWRIGHT_WS_ENDPOINT"],
+    PLAYWRIGHT_PDF_WS_ENDPOINT: process.env["PLAYWRIGHT_PDF_WS_ENDPOINT"],
     LOG_LEVEL: process.env["LOG_LEVEL"],
     DRY_RUN: process.env["DRY_RUN"],
     PROFILE_PATH: process.env["PROFILE_PATH"],
@@ -111,6 +117,9 @@ function parseEnv(): Env {
     );
     process.exit(1);
   }
+  const playwrightWsEndpoint =
+    e.PLAYWRIGHT_WS_ENDPOINT || e.PLAYWRIGHT_PDF_WS_ENDPOINT;
+
   const useOpenAiCollectParse =
     e.COLLECT_USE_OPENAI_PARSE === "false" || e.COLLECT_USE_OPENAI_PARSE === "0"
       ? false
@@ -125,6 +134,7 @@ function parseEnv(): Env {
 
   return {
     ...e,
+    PLAYWRIGHT_WS_ENDPOINT: playwrightWsEndpoint,
     DRY_RUN: Boolean(e.DRY_RUN),
     dataDirAbs: resolve(process.cwd(), e.DATA_DIR),
     outputDirAbs: resolve(process.cwd(), e.OUTPUT_DIR),
